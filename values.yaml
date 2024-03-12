@@ -1,0 +1,184 @@
+# ftpsync - Values for the Web and Crontab containers inside the pod
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+
+securityContext: {}
+
+# Enable persistence (PVC) or hostPath for shared www volume
+persistence:
+  enabled: false
+  storageClass: ""
+  existingClaim: ""
+  accessMode: ReadWriteOnce
+  size: 1200Gi # Typical amd64 & arm64 debian mirror size using ftpsync config below
+  additionalVolumes: []
+  additionalMounts: []
+
+hostPath:
+  enabled: true
+  path: "/var/www"
+
+# web container serves repo data from the shared volume synced by the crontab sidecar
+web:
+  config: |
+    server {
+      listen 80 default_server;
+      listen [::]:80 default_server;
+    
+      server_name _;
+    
+      location / {
+        root /var/www;
+        autoindex on;
+      }
+    }
+
+  image:
+    repository: ghcr.io/n888/ftpsync
+    pullPolicy: IfNotPresent
+    tag: latest
+  
+  resources: {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+  
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      # nginx.ingress.kubernetes.io/whitelist-source-range: '0.0.0.0/0'
+    hosts:
+      - host: default.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: ftpsync-cert
+        hosts:
+          - default.local
+  
+  volumeMounts:
+    - name: nginx
+      mountPath: "/etc/nginx/sites-available/default"
+      subPath: nginx.conf
+      readOnly: true
+    - name: www
+      mountPath: "/var/www"
+      readOnly: true
+
+# crontab triggers ftpsync on an interval and writes to the shared volume
+# rename to `ftpsync` instead 
+# see official ftpsync docs for further config @ https://salsa.debian.org/mirror-team/archvsync/-/blob/master/README.md
+crontab:
+  config: |
+    MIRRORNAME="default.local"
+    TO="/var/www/debian"
+    LOGNAME="ftpsync"
+    
+    # MAILTO="$LOGNAME"
+    # HUB=false
+    
+    ########################################################################
+    ## Connection options
+    ########################################################################
+    
+    RSYNC_HOST=deb.debian.org
+    RSYNC_PATH="debian"
+    # RSYNC_USER=
+    # RSYNC_PASSWORD=
+    
+    ########################################################################
+    ## Mirror information options
+    ########################################################################
+    
+    # INFO_MAINTAINER="Admins <admins@example.com>, Person <person@example.com>"
+    # INFO_SPONSOR="Example <https://example.com>"
+    # INFO_COUNTRY=DE
+    # INFO_LOCATION="Example"
+    # INFO_THROUGHPUT=10Gb
+    
+    ########################################################################
+    ## Include and exclude options
+    ########################################################################
+    
+    ARCH_INCLUDE="all amd64 arm64 source"
+    # ARCH_EXCLUDE=
+    
+    ########################################################################
+    ## Log option
+    ########################################################################
+    
+    # LOGDIR=
+
+  # run ftpsync every five hours
+  entry: "* */5 * * * ftpsync /opt/archvsync/bin/ftpsync-cron"
+
+  command: ["crond", "-m", "-f", "-p", "-x", "sch"] # mail off, foreground, permit any crontab, debug scheduler output"
+  image:
+    repository: ghcr.io/n888/ftpsync
+    pullPolicy: IfNotPresent
+    tag: latest
+
+  resources: {}
+    # limits:
+    #   cpu: 1000m
+    #   memory: 1024Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 512Mi
+  
+  # improve this check
+  livenessProbe:
+    exec:
+      command: ["ls", "/"]
+  readinessProbe:
+    exec:
+      command: ["ls", "/"]
+  
+  volumeMounts:
+    - name: ftpsync
+      mountPath: "/opt/archvsync/etc/ftpsync.conf"
+      subPath: ftpsync.conf
+      readOnly: true
+    - name: crontab
+      mountPath: "/var/spool/cron/crontabs/root"
+      subPath: crontabEntry
+      readOnly: true
+    - name: www
+      mountPath: "/var/www"
