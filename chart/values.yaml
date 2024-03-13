@@ -31,7 +31,7 @@ persistence:
   additionalMounts: []
 
 hostPath:
-  enabled: true
+  enabled: false
   path: "/var/www"
 
 # web container serves repo data from the shared volume synced by the crontab sidecar
