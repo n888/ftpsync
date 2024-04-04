@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  ftpsync:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2024-04-04T06:06:43.679506218Z"
+    description: Helm chart for ftpsync to serve an HTTP mirror of a debian repository,
+      triggered by a crontab sidecar.
+    digest: 6bc7ed9fe093766a633744ae9dfaa93763dc74c74cc6cfe68e074c87f674f556
+    name: ftpsync
+    type: application
+    urls:
+    - https://github.com/n888/ftpsync/releases/download/ftpsync-0.0.1/ftpsync-0.0.1.tgz
+    version: 0.0.1
+generated: "2024-04-04T06:06:43.67951288Z"
